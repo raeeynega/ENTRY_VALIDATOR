@@ -1,0 +1,685 @@
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <img src="{{ url_for('static', filename='logo.png') }}" 
+     alt="Company Logo" 
+     style="height: 45px; width: auto;">
+    <title>RedCup Validation Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background: #f8fafd;
+            padding: 32px 40px;
+        }
+
+        .container {
+            max-width: 1440px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        h1 {
+            font-size: 28px;
+            font-weight: 600;
+            color: #0b1c33;
+            margin-bottom: 4px;
+            letter-spacing: -0.3px;
+        }
+
+        .subtitle {
+            color: #64748b;
+            font-size: 15px;
+            margin-bottom: 28px;
+            font-weight: 400;
+        }
+
+        /* Stats and Filters */
+        .stats-row {
+            display: flex;
+            align-items: center;
+            gap: 32px;
+            margin-bottom: 28px;
+        }
+
+        .total-errors-card {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+        }
+
+        .total-errors-card .number {
+            font-size: 42px;
+            font-weight: 600;
+            color: #0b1c33;
+            line-height: 1;
+        }
+
+        .total-errors-card .label {
+            color: #64748b;
+            font-size: 15px;
+            font-weight: 400;
+            letter-spacing: 0.2px;
+        }
+
+        .filter-tabs {
+            display: flex;
+            gap: 28px;
+            background: white;
+            padding: 4px 6px;
+            border-radius: 40px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+        }
+
+        .filter-tab {
+            color: #64748b;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            padding: 6px 16px;
+            border-radius: 30px;
+            transition: all 0.1s;
+        }
+
+        .filter-tab.active {
+            color: #2563eb;
+            background: #eef2ff;
+        }
+
+        .filter-tab:hover:not(.active) {
+            background: #f8fafc;
+        }
+
+        /* Table */
+        .table-container {
+            background: white;
+            border-radius: 20px;
+            padding: 4px 0 0 0;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.02);
+            border: 1px solid #f0f2f5;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1200px;
+        }
+
+        th {
+            text-align: left;
+            padding: 18px 20px;
+            color: #64748b;
+            font-weight: 500;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            border-bottom: 1px solid #eef2f6;
+            background: white;
+        }
+
+        td {
+            padding: 18px 20px;
+            border-bottom: 1px solid #eef2f6;
+            color: #1e293b;
+            font-size: 14px;
+            line-height: 1.5;
+            vertical-align: top;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background-color: #fafbff;
+        }
+
+        /* ID column */
+        td:first-child {
+            font-weight: 600;
+            color: #0f182a;
+            font-size: 14px;
+            letter-spacing: -0.2px;
+        }
+
+        /* Time column */
+        td:nth-child(2) {
+            color: #475569;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        /* Field column */
+        td:nth-child(3) {
+            color: #1e293b;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        /* Error column */
+        .error-main {
+            color: #1e293b;
+            font-size: 14px;
+            margin-bottom: 6px;
+            line-height: 1.4;
+        }
+
+        .error-value {
+            color: #dc2626;
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 13px;
+            background: #fef2f2;
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 30px;
+            letter-spacing: -0.2px;
+            border: 1px solid #fee2e2;
+        }
+
+        /* Severity badges */
+        .severity-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 30px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.2px;
+            text-transform: uppercase;
+        }
+
+        .severity-critical {
+            background: #fee2e2;
+            color: #b91c1c;
+            border: 1px solid #fecaca;
+        }
+
+        .severity-warning {
+            background: #fffbeb;
+            color: #b45309;
+            border: 1px solid #fef3c7;
+        }
+
+        .severity-info {
+            background: #e0f2fe;
+            color: #0369a1;
+            border: 1px solid #bae6fd;
+        }
+
+        /* Suggestion column */
+        .suggestion-value {
+            color: #059669;
+            font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 13px;
+            background: #ecfdf5;
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 30px;
+            letter-spacing: -0.2px;
+            border: 1px solid #d1fae5;
+            font-weight: 500;
+        }
+
+        /* Device column */
+        .device-main {
+            color: #1e293b;
+            font-weight: 500;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+
+        .device-detail {
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 400;
+        }
+
+        /* User column */
+        .user-name {
+            color: #0f182a;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        /* Status badges */
+        .status-badge {
+            display: inline-block;
+            padding: 5px 14px;
+            border-radius: 30px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.2px;
+            text-transform: uppercase;
+            text-align: center;
+            min-width: 90px;
+        }
+
+        .status-pending {
+            background: #f1f5f9;
+            color: #475569;
+            border: 1px solid #e2e8f0;
+        }
+
+        .status-corrected {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+        }
+
+        .status-dismissed {
+            background: #f1f5f9;
+            color: #475569;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* Action buttons */
+        .action-btn {
+            background: none;
+            border: 1px solid #e2e8f0;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            margin: 2px;
+            color: #475569;
+        }
+
+        .action-btn:hover {
+            background: #f1f5f9;
+        }
+
+        .action-btn.correct {
+            color: #059669;
+            border-color: #a7f3d0;
+        }
+
+        .action-btn.correct:hover {
+            background: #d1fae5;
+        }
+
+        .action-btn.dismiss {
+            color: #b91c1c;
+            border-color: #fecaca;
+        }
+
+        .action-btn.dismiss:hover {
+            background: #fee2e2;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 15% auto;
+            padding: 30px;
+            border-radius: 16px;
+            width: 400px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+
+        .modal-content h3 {
+            margin-bottom: 15px;
+            color: #0b1c33;
+        }
+
+        .modal-content input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .modal-content button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+
+        .modal-content .save-btn {
+            background: #059669;
+            color: white;
+        }
+
+        .modal-content .cancel-btn {
+            background: #f1f5f9;
+            color: #475569;
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #64748b;
+            font-size: 14px;
+            padding: 0 8px;
+        }
+
+        .view-history {
+            color: #2563eb;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 14px;
+            letter-spacing: 0.2px;
+            cursor: pointer;
+        }
+
+        .view-history:hover {
+            text-decoration: underline;
+        }
+
+        .sync-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        .sync-dot {
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 0 2px #d1fae5;
+        }
+
+        .sync-dot.syncing {
+            background: #f59e0b;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .reset-btn {
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            padding: 8px 16px;
+            border-radius: 30px;
+            font-size: 13px;
+            cursor: pointer;
+            margin-left: 20px;
+        }
+
+        .reset-btn:hover {
+            background: #e2e8f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h1>RedCup Validation</h1>
+                <div class="subtitle">Entry error tracking & correction dashboard</div>
+            </div>
+            <a href="/add-test-data" class="reset-btn" style="text-decoration: none; color: #475569;">➕ Load Sample Data</a>
+        </div>
+
+        <!-- Stats and Filters -->
+        <div class="stats-row">
+            <div class="total-errors-card">
+                <span class="number">{{ all_errors_count }}</span>
+                <span class="label">Total Errors</span>
+            </div>
+            <div class="filter-tabs">
+                <a href="/?filter=All" class="filter-tab {% if current_filter == 'All' %}active{% endif %}">All</a>
+                <a href="/?filter=Critical" class="filter-tab {% if current_filter == 'Critical' %}active{% endif %}">Critical</a>
+                <a href="/?filter=Warning" class="filter-tab {% if current_filter == 'Warning' %}active{% endif %}">Warning</a>
+                <a href="/?filter=Info" class="filter-tab {% if current_filter == 'Info' %}active{% endif %}">Info</a>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Time</th>
+                        <th>Field</th>
+                        <th>Error</th>
+                        <th>Severity</th>
+                        <th>Suggestion</th>
+                        <th>Device</th>
+                        <th>User</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if errors and errors|length > 0 %}
+                        {% for error in errors %}
+                        <tr>
+                            <td>{{ error.record_id }}</td>
+                            <td>{{ error.timestamp }}</td>
+                            <td>{{ error.field_name }}</td>
+                            <td>
+                                <div class="error-main">{{ error.error_message }}</div>
+                                <span class="error-value">{{ error.error_value }}</span>
+                            </td>
+                            <td>
+                                <span class="severity-badge severity-{{ error.severity|lower }}">
+                                    {{ error.severity }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="suggestion-value">{{ error.suggested_correction }}</span>
+                            </td>
+                            <td>
+                                <div class="device-main">{{ error.device }}</div>
+                                <div class="device-detail">{{ error.location }}</div>
+                            </td>
+                            <td><span class="user-name">{{ error.entered_by }}</span></td>
+                            <td>
+                                <span class="status-badge status-{{ error.status|lower }}">{{ error.status }}</span>
+                            </td>
+                            <td>
+                                {% if error.status == 'Pending' %}
+                                <button class="action-btn correct" onclick="showResolveModal({{ error.id }})">✓ Correct</button>
+                                <button class="action-btn dismiss" onclick="dismissError({{ error.id }})">✗ Dismiss</button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="10" style="text-align: center; padding: 60px; color: #64748b;">
+                                <div style="font-size: 16px; margin-bottom: 10px;">No errors found</div>
+                                <div style="font-size: 14px;">Click "Load Sample Data" to add test entries</div>
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <a href="#" class="view-history" onclick="showHistory()">View history →</a>
+            <div class="sync-status">
+                <span class="sync-dot" id="syncDot"></span>
+                <span id="syncText">Last sync: {{ now }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resolve Modal -->
+    <div id="resolveModal" class="modal">
+        <div class="modal-content">
+            <h3>Resolve Error</h3>
+            <input type="text" id="resolutionNotes" placeholder="How was this resolved?">
+            <div>
+                <button class="save-btn" onclick="submitResolution()">Save</button>
+                <button class="cancel-btn" onclick="closeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+        <!-- Top navigation bar -->
+<div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 20px; padding: 10px 0; border-bottom: 1px solid #eef2f6;">
+    <div style="display: flex; align-items: center; gap: 15px;">
+        <!-- User info -->
+        <div style="text-align: right;">
+            <div style="font-weight: 600; color: #1e293b;">{{ user }}</div>
+            <div style="font-size: 12px; color: #64748b;">{{ role|title }}</div>
+        </div>
+        
+        <!-- User menu -->
+        <div class="user-menu" style="position: relative;">
+            <div class="user-avatar" onclick="toggleUserMenu()" style="width: 40px; height: 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; cursor: pointer;">
+                {{ user[0] if user else 'U' }}
+            </div>
+            
+            <!-- Dropdown menu -->
+            <div id="userDropdown" style="display: none; position: absolute; right: 0; top: 50px; background: white; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 200px; z-index: 1000;">
+                <div style="padding: 15px; border-bottom: 1px solid #eef2f6;">
+                    <div style="font-weight: 600; color: #1e293b;">{{ user }}</div>
+                    <div style="font-size: 12px; color: #64748b;">{{ role }}</div>
+                </div>
+                <a href="{{ url_for('profile') }}" style="display: block; padding: 12px 15px; color: #1e293b; text-decoration: none; font-size: 14px; hover: background: #f8fafc;">
+                    <i class="fas fa-user" style="margin-right: 10px;"></i> Profile
+                </a>
+                {% if role == 'admin' %}
+                <a href="{{ url_for('manage_users') }}" style="display: block; padding: 12px 15px; color: #1e293b; text-decoration: none; font-size: 14px;">
+                    <i class="fas fa-users-cog" style="margin-right: 10px;"></i> Manage Users
+                </a>
+                {% endif %}
+                <a href="{{ url_for('logout') }}" style="display: block; padding: 12px 15px; color: #dc2626; text-decoration: none; font-size: 14px; border-top: 1px solid #eef2f6;">
+                    <i class="fas fa-sign-out-alt" style="margin-right: 10px;"></i> Logout
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add this script at the bottom of your dashboard.html -->
+<script>
+    function toggleUserMenu() {
+        const dropdown = document.getElementById('userDropdown');
+        dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+    }
+    
+    // Close dropdown when clicking outside
+    window.onclick = function(event) {
+        if (!event.target.matches('.user-avatar') && !event.target.matches('.user-avatar *')) {
+            const dropdown = document.getElementById('userDropdown');
+            if (dropdown) dropdown.style.display = 'none';
+        }
+    }
+</script>
+    <script>
+        let currentErrorId = null;
+
+        function showResolveModal(errorId) {
+            currentErrorId = errorId;
+            document.getElementById('resolveModal').style.display = 'block';
+            document.getElementById('resolutionNotes').value = '';
+        }
+
+        function closeModal() {
+            document.getElementById('resolveModal').style.display = 'none';
+            currentErrorId = null;
+        }
+
+        function submitResolution() {
+            const notes = document.getElementById('resolutionNotes').value;
+            if (!notes) {
+                alert('Please enter resolution notes');
+                return;
+            }
+
+            // Create a form and submit
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `/resolve/${currentErrorId}`;
+            
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'notes';
+            input.value = notes;
+            
+            form.appendChild(input);
+            document.body.appendChild(form);
+            form.submit();
+        }
+
+        function dismissError(errorId) {
+            if (confirm('Are you sure you want to dismiss this error?')) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = `/dismiss/${errorId}`;
+                document.body.appendChild(form);
+                form.submit();
+            }
+        }
+
+        function showHistory() {
+            alert('History view coming soon!');
+        }
+
+        // Auto-refresh every 30 seconds
+        let refreshInterval = setInterval(function() {
+            const dot = document.getElementById('syncDot');
+            const text = document.getElementById('syncText');
+            
+            dot.classList.add('syncing');
+            text.innerHTML = 'Last sync: syncing...';
+            
+            // Fetch new data
+            fetch('/api/errors')
+                .then(response => response.json())
+                .then(data => {
+                    dot.classList.remove('syncing');
+                    text.innerHTML = 'Last sync: just now';
+                    
+                    // If you want auto-refresh, uncomment:
+                    // location.reload();
+                })
+                .catch(() => {
+                    dot.classList.remove('syncing');
+                    text.innerHTML = 'Last sync: failed';
+                });
+        }, 30000);
+
+        // Click outside modal to close
+        window.onclick = function(event) {
+            const modal = document.getElementById('resolveModal');
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+        
+    </script>
+</body>
+</html>

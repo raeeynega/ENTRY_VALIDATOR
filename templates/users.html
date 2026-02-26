@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Users - RedCup</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background: #fafafa;
+            padding: 30px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .back-link {
+            color: #6b7280;
+            text-decoration: none;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .back-link:hover {
+            color: #e11d2e;
+        }
+
+        h1 {
+            font-size: 24px;
+            color: #111;
+        }
+
+        .add-btn {
+            background: #e11d2e;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.2s;
+        }
+
+        .add-btn:hover {
+            background: #c81e2c;
+        }
+
+        /* Flash messages */
+        .flash-messages {
+            margin-bottom: 20px;
+        }
+
+        .flash-success {
+            background: #d1fae5;
+            border: 1px solid #a7f3d0;
+            color: #065f46;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .flash-error {
+            background: #fee2e2;
+            border: 1px solid #fecaca;
+            color: #b91c1c;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .flash-info {
+            background: #e0f2fe;
+            border: 1px solid #bae6fd;
+            color: #0369a1;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Users table */
+        .users-card {
+            background: white;
+            border-radius: 14px;
+            padding: 25px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.05);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            text-align: left;
+            padding: 15px 10px;
+            color: #6b7280;
+            font-weight: 500;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        td {
+            padding: 15px 10px;
+            border-bottom: 1px solid #e5e7eb;
+            color: #111;
+            font-size: 14px;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background: #f9f9f9;
+        }
+
+        .role-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .role-admin {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .role-supervisor {
+            background: #e0f2fe;
+            color: #0369a1;
+        }
+
+        .role-manager {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .action-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 5px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .edit-btn {
+            color: #6b7280;
+        }
+
+        .edit-btn:hover {
+            color: #e11d2e;
+            background: #fee2e2;
+        }
+
+        .delete-btn {
+            color: #6b7280;
+        }
+
+        .delete-btn:hover {
+            color: #b91c1c;
+            background: #fee2e2;
+        }
+
+        .reset-btn {
+            color: #6b7280;
+        }
+
+        .reset-btn:hover {
+            color: #0369a1;
+            background: #e0f2fe;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background: white;
+            margin: 10% auto;
+            padding: 30px;
+            border-radius: 14px;
+            width: 450px;
+            max-width: 90%;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h2 {
+            font-size: 20px;
+            color: #111;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #6b7280;
+        }
+
+        .close-modal:hover {
+            color: #111;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 6px;
+            color: #374151;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #e11d2e;
+            box-shadow: 0 0 0 3px rgba(225,29,46,0.08);
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        .save-btn {
+            background: #e11d2e;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .save-btn:hover {
+            background: #c81e2c;
+        }
+
+        .cancel-btn {
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid #e5e7eb;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .cancel-btn:hover {
+            background: #e5e7eb;
+        }
+
+        /* Delete confirmation */
+        .delete-confirm {
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        .delete-icon {
+            font-size: 48px;
+            color: #e11d2e;
+            margin-bottom: 20px;
+        }
+
+        .delete-confirm p {
+            color: #374151;
+            margin-bottom: 10px;
+        }
+
+        .delete-confirm .warning {
+            color: #b91c1c;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        .delete-actions {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .delete-confirm-btn {
+            background: #e11d2e;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .delete-confirm-btn:hover {
+            background: #b91c1c;
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 50px;
+            color: #6b7280;
+        }
+
+        .empty-state i {
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #d1d5db;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <a href="{{ url_for('dashboard') }}" class="back-link">
+                    <i class="fas fa-arrow-left"></i> Back to Dashboard
+                </a>
+                <h1>Manage Users</h1>
+            </div>
+            <button class="add-btn" onclick="openAddModal()">
+                <i class="fas fa-plus"></i> Add New User
+            </button>
+        </div>
+
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="flash-{{ category }}">
+                            <i class="fas fa-{% if category == 'success' %}check-circle{% elif category == 'error' %}exclamation-circle{% else %}info-circle{% endif %}"></i>
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <!-- Users table -->
+        <div class="users-card">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Full Name</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th>Last Active</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if users %}
+                        {% for username, user_data in users.items() %}
+                        <tr>
+                            <td><strong>{{ username }}</strong></td>
+                            <td>{{ user_data.name }}</td>
+                            <td>
+                                <span class="role-badge role-{{ user_data.role }}">
+                                    {{ user_data.role|title }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if user_data.get('active', true) %}
+                                    <span style="color: #059669;">Active</span>
+                                {% else %}
+                                    <span style="color: #6b7280;">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ user_data.get('last_active', 'Never') }}</td>
+                            <td>
+                                <div class="actions">
+                                    <button class="action-btn edit-btn" onclick="openEditModal('{{ username }}')" title="Edit user">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="action-btn reset-btn" onclick="openResetModal('{{ username }}')" title="Reset password">
+                                        <i class="fas fa-key"></i>
+                                    </button>
+                                    {% if username != session.user %}
+                                    <button class="action-btn delete-btn" onclick="openDeleteModal('{{ username }}')" title="Delete user">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="6">
+                                <div class="empty-state">
+                                    <i class="fas fa-users"></i>
+                                    <p>No users found</p>
+                                    <button class="add-btn" style="margin-top: 20px; display: inline-block;" onclick="openAddModal()">
+                                        Add your first user
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Add/Edit User Modal -->
+    <div id="userModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Add New User</h2>
+                <button class="close-modal" onclick="closeModal()">&times;</button>
+            </div>
+            <form id="userForm" method="POST">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="name">Full Name</label>
+                    <input type="text" id="name" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                <div class="form-group">
+                    <label for="role">Role</label>
+                    <select id="role" name="role" required>
+                        <option value="admin">Administrator</option>
+                        <option value="supervisor">Supervisor</option>
+                        <option value="manager">Data Manager</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="cancel-btn" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="save-btn" id="modalSubmitBtn">Create User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Reset Password Modal -->
+    <div id="resetModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Reset Password</h2>
+                <button class="close-modal" onclick="closeResetModal()">&times;</button>
+            </div>
+            <form id="resetForm" method="POST">
+                <div class="form-group">
+                    <label for="reset_username">Username</label>
+                    <input type="text" id="reset_username" name="username" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="new_password">New Password</label>
+                    <input type="password" id="new_password" name="new_password" required>
+                </div>
+                <div class="form-group">
+                    <label for="confirm_password">Confirm Password</label>
+                    <input type="password" id="confirm_password" name="confirm_password" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="cancel-btn" onclick="closeResetModal()">Cancel</button>
+                    <button type="submit" class="save-btn">Reset Password</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="deleteModal" class="modal">
+        <div class="modal-content">
+            <div class="delete-confirm">
+                <div class="delete-icon">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <h3>Delete User</h3>
+                <p>Are you sure you want to delete <strong id="deleteUsername"></strong>?</p>
+                <p class="warning">This action cannot be undone.</p>
+                <div class="delete-actions">
+                    <button class="cancel-btn" onclick="closeDeleteModal()">Cancel</button>
+                    <form id="deleteForm" method="POST" style="display: inline;">
+                        <button type="submit" class="delete-confirm-btn">Delete User</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // User Modal Functions
+        function openAddModal() {
+            document.getElementById('modalTitle').textContent = 'Add New User';
+            document.getElementById('userForm').action = "{{ url_for('add_user') }}";
+            document.getElementById('username').value = '';
+            document.getElementById('name').value = '';
+            document.getElementById('password').value = '';
+            document.getElementById('password').required = true;
+            document.getElementById('role').value = 'manager';
+            document.getElementById('modalSubmitBtn').textContent = 'Create User';
+            document.getElementById('userModal').style.display = 'block';
+        }
+
+        function openEditModal(username) {
+            document.getElementById('modalTitle').textContent = 'Edit User';
+            document.getElementById('userForm').action = `/edit-user/${username}`;
+            document.getElementById('password').required = false;
+            document.getElementById('modalSubmitBtn').textContent = 'Update User';
+            
+            // Fetch user data
+            fetch(`/get-user/${username}`)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('username').value = data.username;
+                    document.getElementById('name').value = data.name;
+                    document.getElementById('password').value = '';
+                    document.getElementById('role').value = data.role;
+                    document.getElementById('userModal').style.display = 'block';
+                });
+        }
+
+        function openResetModal(username) {
+            document.getElementById('reset_username').value = username;
+            document.getElementById('resetForm').action = `/reset-password/${username}`;
+            document.getElementById('resetModal').style.display = 'block';
+        }
+
+        function openDeleteModal(username) {
+            document.getElementById('deleteUsername').textContent = username;
+            document.getElementById('deleteForm').action = `/delete-user/${username}`;
+            document.getElementById('deleteModal').style.display = 'block';
+        }
+
+        function closeModal() {
+            document.getElementById('userModal').style.display = 'none';
+        }
+
+        function closeResetModal() {
+            document.getElementById('resetModal').style.display = 'none';
+            document.getElementById('resetForm').reset();
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('deleteModal').style.display = 'none';
+        }
+
+        // Close modals when clicking outside
+        window.onclick = function(event) {
+            const userModal = document.getElementById('userModal');
+            const resetModal = document.getElementById('resetModal');
+            const deleteModal = document.getElementById('deleteModal');
+            
+            if (event.target == userModal) {
+                closeModal();
+            }
+            if (event.target == resetModal) {
+                closeResetModal();
+            }
+            if (event.target == deleteModal) {
+                closeDeleteModal();
+            }
+        }
+
+        // Password confirmation validation
+        document.getElementById('resetForm')?.addEventListener('submit', function(e) {
+            const newPass = document.getElementById('new_password').value;
+            const confirmPass = document.getElementById('confirm_password').value;
+            
+            if (newPass !== confirmPass) {
+                e.preventDefault();
+                alert('Passwords do not match!');
+            }
+        });
+    </script>
+</body>
+</html>

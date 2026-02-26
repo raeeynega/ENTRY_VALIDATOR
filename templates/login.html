@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RedCup - Login</title>
+
+    <!-- Inter Font (matches modern dashboards) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #fafafa;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #111;
+        }
+
+        /* Card */
+        .login-container {
+            background: #ffffff;
+            width: 420px;
+            padding: 40px 38px;
+            border-radius: 14px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.05);
+        }
+
+        /* Logo */
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 28px;
+        }
+
+        .logo-icon {
+            width: 44px;
+            height: 44px;
+            background: #e11d2e;
+            border-radius: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 20px;
+        }
+
+        .logo h2 {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        /* Title */
+        h1 {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .subtitle {
+            font-size: 14px;
+            color: #6b7280;
+            margin-bottom: 28px;
+        }
+
+        /* Flash messages */
+        .flash-messages {
+            margin-bottom: 20px;
+        }
+
+        .flash-error {
+            background: #fee2e2;
+            border: 1px solid #fecaca;
+            color: #b91c1c;
+            padding: 12px 14px;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .flash-success {
+            background: #d1fae5;
+            border: 1px solid #a7f3d0;
+            color: #065f46;
+            padding: 12px 14px;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .flash-info {
+            background: #e0f2fe;
+            border: 1px solid #bae6fd;
+            color: #0369a1;
+            padding: 12px 14px;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        /* Form */
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 6px;
+            color: #374151;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+
+        input::placeholder {
+            color: #9ca3af;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #e11d2e;
+            box-shadow: 0 0 0 3px rgba(225,29,46,0.08);
+        }
+
+        /* Remember me and forgot password */
+        .form-options {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            font-size: 13px;
+        }
+
+        .remember-me {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #4b5563;
+        }
+
+        .remember-me input[type="checkbox"] {
+            width: auto;
+            accent-color: #e11d2e;
+        }
+
+        .forgot-password {
+            color: #e11d2e;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .forgot-password:hover {
+            text-decoration: underline;
+        }
+
+        /* Button */
+        button {
+            width: 100%;
+            padding: 13px;
+            background: #e11d2e;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 8px;
+            transition: background 0.2s ease, transform 0.1s ease;
+        }
+
+        button:hover {
+            background: #c81e2c;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        /* Demo credentials */
+        .demo-credentials {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .demo-credentials p {
+            font-size: 12px;
+            color: #6b7280;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .credential-badges {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            background: #f3f4f6;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            color: #4b5563;
+        }
+
+        .badge strong {
+            color: #e11d2e;
+        }
+
+        /* Bottom link */
+        .signup {
+            margin-top: 24px;
+            font-size: 14px;
+            color: #6b7280;
+            text-align: center;
+        }
+
+        .signup a {
+            color: #e11d2e;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .signup a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+<div class="login-container">
+
+    <!-- Logo -->
+    <div class="logo">
+        <div class="logo-icon">🍷</div>
+        <h2>RedCup</h2>
+    </div>
+
+    <h1>Sign in</h1>
+    <p class="subtitle">Access the validation dashboard</p>
+
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="flash-messages">
+                {% for category, message in messages %}
+                    <div class="flash-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Error message from login attempt -->
+    {% if error %}
+        <div class="flash-error">{{ error }}</div>
+    {% endif %}
+
+    <!-- Login form -->
+    <form method="POST" action="{{ url_for('login') }}">
+        <div class="form-group">
+            <label>Username</label>
+            <input type="text" 
+                   name="username"
+                   placeholder="Enter your username" 
+                   required
+                   autofocus>
+        </div>
+
+        <div class="form-group">
+            <label>Password</label>
+            <input type="password" 
+                   name="password"
+                   placeholder="Enter your password" 
+                   required>
+        </div>
+
+        <div class="form-options">
+            <label class="remember-me">
+                <input type="checkbox" name="remember"> Remember me
+            </label>
+            <a href="#" class="forgot-password">Forgot password?</a>
+        </div>
+
+        <button type="submit">Sign in</button>
+    </form>
+
+    <!-- Demo credentials (remove in production) -->
+    <div class="demo-credentials">
+        <p>Demo credentials for testing:</p>
+        <div class="credential-badges">
+            <span class="badge"><strong>admin</strong> / admin123</span>
+            <span class="badge"><strong>supervisor</strong> / sup456</span>
+            <span class="badge"><strong>data_manager</strong> / data789</span>
+        </div>
+    </div>
+
+    <!-- Sign up link (optional) -->
+    <div class="signup">
+        Don't have an account? <a href="#">Sign up</a>
+    </div>
+
+</div>
+
+</body>
+</html>
