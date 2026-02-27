@@ -35,7 +35,7 @@
 #
 #
 # WHY USE IT
-# ----------
+
 # • Catch data entry mistakes early
 # • Keep REDCap data clean and accurate
 # • Track who makes errors and how to fix them
@@ -43,8 +43,9 @@
 #
 #
 # TECH STUFF
-# ----------
+
 # • Built with Python/Flask
 # • Uses SQLite database
 # • Connects to REDCap via API
+
 # • Runs in browser
