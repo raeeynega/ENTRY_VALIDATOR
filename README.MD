@@ -1,8 +1,8 @@
 # REDCAP VALIDATION DASHBOARD
-# ===========================
+# 
 #
 # WHAT IS IT?
-# -----------
+# 
 # A web tool that checks data entered into REDCap for errors.
 # It flags mistakes and shows them on a dashboard so admins can fix them.
 #
@@ -49,3 +49,4 @@
 # • Connects to REDCap via API
 
 # • Runs in browser
+
