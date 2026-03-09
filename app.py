@@ -3,8 +3,11 @@ from database import ValidationDatabase
 from validation_engine import ValidationEngine
 import os
 import functools
+import sqlite3
+import json
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
+import re
 
 load_dotenv()
 
@@ -35,7 +38,7 @@ def admin_required(view):
             return redirect(url_for('login', next=request.url))
         if session.get('role') != 'admin':
             flash('Admin access required', 'error')
-            return redirect(url_for('dashboard'))
+            return redirect(url_for('dashboard_with_project', project=session.get('current_project', 'ibd')))
         return view(**kwargs)
     return wrapped_view
 
@@ -63,6 +66,7 @@ def login():
             session['name'] = user['name']
             session['role'] = user['role']
             session['login_time'] = datetime.now().isoformat()
+            session['current_project'] = 'ibd'  # Default project
             
             flash(f'Welcome back, {user["name"]}!', 'success')
             
@@ -92,10 +96,16 @@ def select_project():
 
 @app.route('/dashboard')
 @login_required
+def dashboard_redirect():
+    """Redirect old dashboard URL to new one with default project"""
+    return redirect(url_for('dashboard_with_project', project=session.get('current_project', 'ibd')))
+
+@app.route('/dashboard-with-project')
+@login_required
 def dashboard_with_project():
     """Dashboard with project context"""
     # Get selected project from query string
-    project = request.args.get('project', 'ibd')
+    project = request.args.get('project', session.get('current_project', 'ibd'))
     
     # Store project in session
     session['current_project'] = project
@@ -103,7 +113,7 @@ def dashboard_with_project():
     # Get filter from query string (All, Critical, Warning, Info)
     severity_filter = request.args.get('filter', 'All')
     
-    # Get all errors
+    # Get all errors from database
     all_errors = db.get_active_errors()
     
     # Filter errors by project if your database has project field
@@ -117,8 +127,8 @@ def dashboard_with_project():
     # Calculate stats
     stats = {
         'total': len(all_errors),
-        'active': len([e for e in all_errors if e.get('status', '').lower() == 'pending']),
-        'records_affected': len(set([e.get('record_id') for e in all_errors])),
+        'active': len([e for e in all_errors if e.get('status', '').lower() == 'active']),
+        'records_affected': len(set([e.get('record_id') for e in all_errors if e.get('record_id')])),
         'critical': len([e for e in all_errors if e.get('severity', '').lower() == 'critical']),
         'warning': len([e for e in all_errors if e.get('severity', '').lower() == 'warning']),
         'info': len([e for e in all_errors if e.get('severity', '').lower() == 'info'])
@@ -148,31 +158,430 @@ def dashboard_with_project():
 @login_required
 def api_errors():
     """API endpoint for real-time updates"""
-    errors = db.get_active_errors()
-    return jsonify({'errors': errors})
+    try:
+        app.logger.info("📊 Fetching active errors from database...")
+        errors = db.get_active_errors()
+        app.logger.info(f"📊 Found {len(errors)} errors")
+        
+        # Debug: log first error if any
+        if errors:
+            app.logger.info(f"📊 First error: {errors[0]}")
+        
+        return jsonify({
+            'total': len(errors),
+            'errors': errors
+        })
+    except Exception as e:
+        app.logger.error(f"❌ Error in api_errors: {str(e)}")
+        import traceback
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/redcap-webhook', methods=['POST'])
 def redcap_webhook():
-    """Endpoint for REDCap Data Entry Trigger (no login required)"""
-    data = request.get_json()
+    """Endpoint for REDCap Data Entry Trigger - uses API to fetch actual data"""
+    
+    # Handle both JSON and form data
+    if request.is_json:
+        data = request.get_json()
+    else:
+        data = request.form.to_dict()
+    
+    app.logger.info(f"📦 Trigger received: {data}")
     
     if not data:
         return jsonify({'error': 'No data received'}), 400
     
     record_id = data.get('record')
+    if not record_id:
+        return jsonify({'error': 'Record ID required'}), 400
     
-    # Validate the record
-    errors = validator.validate_record(record_id)
+    app.logger.info(f"📋 Trigger for record: {record_id}, instrument: {data.get('instrument')}")
     
-    # Log all errors
+    # DO NOT create a mock record - let the validation engine fetch via API
+    # The ValidationEngine's fetch_record method will use the configured REDCap API
+    
+    try:
+        # This will use the REDCap API to get the actual record data
+        errors = validator.validate_record(record_id)
+        app.logger.info(f"✅ Found {len(errors)} errors")
+        
+        # Log errors to database with context from the trigger
+        for error in errors:
+            error['form_name'] = data.get('instrument', 'unknown')
+            error['entered_by'] = data.get('username', 'redcap_user')
+            # Add completion status if useful
+            complete_field = f"{data.get('instrument')}_complete"
+            if complete_field in data:
+                error['form_status'] = data.get(complete_field)
+            db.log_error(error)
+            app.logger.info(f"   → Logged: {error.get('field_name')} - {error.get('error_message')}")
+        
+        return jsonify({
+            'status': 'processed',
+            'record': record_id,
+            'errors_found': len(errors)
+        })
+        
+    except Exception as e:
+        app.logger.error(f"❌ Validation error: {e}")
+        return jsonify({'error': str(e)}), 500
+# ============================================================================
+# UPDATED ENDPOINT: Handle "Save & Go To Next Form" submissions
+# Fully integrated with your 800+ validation rules
+# ============================================================================
+
+@app.route('/api/validate-on-submit', methods=['POST'])
+def validate_on_submit():
+    """
+    Called when user clicks "Save & Go To Next Form" in REDCap
+    Validates the form data using ALL 800+ ValidationEngine rules
+    Returns validation results and determines if user can proceed
+    """
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data received'}), 400
+    
+    # Extract data from request
+    record_id = data.get('record_id')
+    current_form = data.get('current_form', 'unknown')
+    next_form = data.get('next_form', 'unknown')
+    username = data.get('username', 'Unknown')
+    device = data.get('device', request.headers.get('User-Agent', 'Unknown'))
+    form_data = data.get('form_data', {})
+    
+    if not record_id:
+        return jsonify({'error': 'Record ID is required'}), 400
+    
+    app.logger.info(f"🔍 Validating record {record_id} for form {current_form} → {next_form}")
+    app.logger.info(f"📋 Form data keys: {list(form_data.keys())}")
+    
+    # Create a mock record structure that ValidationEngine expects
+    mock_record = {
+        'record_id': record_id,
+        **form_data  # Merge all form fields
+    }
+    
+    # Store original fetch_record method
+    original_fetch = validator.fetch_record
+    
+    # Override to use submitted data
+    def mock_fetch(rid):
+        if rid == record_id:
+            return mock_record
+        # For any other records (like cross-validation), fetch from API or return None
+        return original_fetch(rid)
+    
+    validator.fetch_record = mock_fetch
+    
+    # Run validation using your existing 800+ rules
+    # Run validation using your existing 800+ rules
+    try:
+        app.logger.info(f"🔍 Running validation engine for form: {current_form}...")
+        # Pass the form name to validate only relevant fields
+        errors = validator.validate_record(record_id, form_name=current_form)
+        app.logger.info(f"✅ Validation complete. Found {len(errors)} errors")
+    except Exception as e:
+        app.logger.error(f"❌ Validation error: {e}")
+        # Restore original method
+        validator.fetch_record = original_fetch
+        return jsonify({
+            'status': 'error',
+            'message': f'Validation error: {str(e)}',
+            'can_proceed': True  # Allow proceed on error
+        }), 200
+    
+    # Restore original method
+    validator.fetch_record = original_fetch
+    
+    # Format errors for response and database
+    formatted_errors = []
+    critical_count = 0
+    warning_count = 0
+    info_count = 0
+    
     for error in errors:
+        # Count by severity
+        severity = error.get('severity', 'Warning')
+        if severity == 'Critical':
+            critical_count += 1
+        elif severity == 'Warning':
+            warning_count += 1
+        elif severity == 'Info':
+            info_count += 1
+        
+        formatted_errors.append({
+            'id': error.get('id', ''),
+            'field': error.get('field_name', ''),
+            'error': error.get('error_message', ''),
+            'suggestion': error.get('suggested_correction', ''),
+            'severity': severity,
+            'value': error.get('error_value', ''),
+            'record_id': record_id,
+            'timestamp': error.get('timestamp', datetime.now().isoformat())
+        })
+    
+    # Save errors to database
+    if errors:
+        app.logger.info(f"💾 Saving {len(errors)} errors to database...")
+        for error in errors:
+            # Add form context to error
+            error['form_name'] = current_form
+            error['next_form'] = next_form
+            error['device_info'] = {'device': device, 'user': username}
+            db.log_error(error)
+        app.logger.info("✅ Errors saved to database")
+    
+    # Determine if user can proceed
+    if critical_count > 0:
+        # BLOCK navigation - must fix critical errors
+        app.logger.warning(f"🚫 Blocking navigation: {critical_count} critical errors")
+        return jsonify({
+            'status': 'blocked',
+            'can_proceed': False,
+            'message': f'Found {critical_count} critical error(s). Please fix before proceeding.',
+            'errors': formatted_errors,
+            'total_errors': len(formatted_errors),
+            'critical_count': critical_count,
+            'warning_count': warning_count,
+            'info_count': info_count,
+            'next_form': next_form
+        }), 422
+    elif warning_count > 0:
+        # ALLOW navigation but show warnings
+        app.logger.info(f"⚠️ Allowing navigation with {warning_count} warnings")
+        return jsonify({
+            'status': 'warning',
+            'can_proceed': True,
+            'message': f'Found {warning_count} warning(s). You can proceed, but please review.',
+            'errors': formatted_errors,
+            'total_errors': len(formatted_errors),
+            'critical_count': 0,
+            'warning_count': warning_count,
+            'info_count': info_count,
+            'next_form': next_form
+        }), 200
+    else:
+        # NO ERRORS - proceed normally
+        app.logger.info("✅ No errors found, proceeding to next form")
+        return jsonify({
+            'status': 'success',
+            'can_proceed': True,
+            'message': 'Validation passed! Moving to next form.',
+            'errors': formatted_errors if info_count > 0 else [],
+            'total_errors': info_count,
+            'critical_count': 0,
+            'warning_count': 0,
+            'info_count': info_count,
+            'next_form': next_form
+        }), 200
+    
+
+@app.route('/api/upload-csv', methods=['POST'])
+@login_required
+def upload_csv():
+    """Upload and process CSV file"""
+    if 'csv_file' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
+    
+    file = request.files['csv_file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+    
+    if not file.filename.endswith('.csv'):
+        return jsonify({'error': 'File must be CSV'}), 400
+    
+    # Process CSV and add errors to database
+    import csv
+    import io
+    
+    stream = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
+    csv_reader = csv.DictReader(stream)
+    
+    count = 0
+    for row in csv_reader:
+        # Map CSV columns to error data
+        error_data = {
+            'record_id': row.get('record_id', 'CSV-IMPORT'),
+            'field_name': row.get('field_name', ''),
+            'error_value': row.get('error_value', ''),
+            'error_message': row.get('error_message', ''),
+            'suggested_correction': row.get('suggestion', ''),
+            'entered_by': session.get('name', 'CSV Import'),
+            'severity': row.get('severity', 'Warning'),
+            'status': 'Pending',
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        if error_data['field_name'] and error_data['error_message']:
+            db.log_error(error_data)
+            count += 1
+    
+    return jsonify({'success': True, 'count': count})
+
+@app.route('/api/export-csv')
+@login_required
+def export_csv():
+    """Export errors as CSV"""
+    import csv
+    import io
+    
+    # Get selected IDs if any
+    ids = request.args.get('ids', '')
+    
+    if ids:
+        # Export selected errors
+        id_list = [int(id) for id in ids.split(',')]
+        placeholders = ','.join('?' * len(id_list))
+        cursor = db.conn.cursor()
+        cursor.execute(f'''
+            SELECT record_id, field_name, error_value, error_message, 
+                   suggested_correction, severity, status, timestamp
+            FROM validation_errors 
+            WHERE id IN ({placeholders})
+        ''', id_list)
+        rows = cursor.fetchall()
+    else:
+        # Export all active errors
+        rows = db.get_active_errors(include_resolved=True)
+    
+    # Create CSV
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Record ID', 'Field', 'Error Value', 'Error Message', 
+                     'Suggestion', 'Severity', 'Status', 'Timestamp'])
+    
+    for row in rows:
+        writer.writerow([
+            row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7]
+        ])
+    
+    # Return as downloadable file
+    from flask import make_response
+    response = make_response(output.getvalue())
+    response.headers["Content-Disposition"] = "attachment; filename=errors_export.csv"
+    response.headers["Content-type"] = "text/csv"
+    return response
+# ============================================================================
+# NEW ENDPOINT: Manual validation trigger for testing
+# ============================================================================
+
+@app.route('/api/validate-record/<record_id>', methods=['POST'])
+@login_required
+def api_validate_record(record_id):
+    """Manually trigger validation for a specific record"""
+    # Get form data from request if provided
+    data = request.get_json() or {}
+    form_data = data.get('form_data', {})
+    
+    # Create mock record
+    mock_record = {
+        'record_id': record_id,
+        **form_data
+    }
+    
+    # Store original method
+    original_fetch = validator.fetch_record
+    
+    # Override
+    def mock_fetch(rid):
+        if rid == record_id:
+            return mock_record
+        return original_fetch(rid)
+    
+    validator.fetch_record = mock_fetch
+    
+    # Validate
+    try:
+        errors = validator.validate_record(record_id)
+    except Exception as e:
+        validator.fetch_record = original_fetch
+        return jsonify({'error': str(e)}), 500
+    
+    # Restore
+    validator.fetch_record = original_fetch
+    
+    # Save to database
+    for error in errors:
+        error['device_info'] = {'device': 'Manual API', 'user': session.get('name', 'Unknown')}
         db.log_error(error)
     
     return jsonify({
-        'status': 'processed',
-        'record': record_id,
-        'errors_found': len(errors)
+        'record_id': record_id,
+        'errors_found': len(errors),
+        'errors': errors
     })
+
+# ============================================================================
+# NEW ENDPOINT: Get validation rules list
+# ============================================================================
+
+@app.route('/api/rules')
+@login_required
+def get_rules():
+    """Get all validation rules"""
+    rules = []
+    for rule in validator.rules:
+        rules.append({
+            'field': rule.get('field'),
+            'error_msg': rule.get('error_msg'),
+            'suggestion': rule.get('suggestion'),
+            'severity': rule.get('severity', 'Warning')
+        })
+    
+    # Group by field
+    rules_by_field = {}
+    for rule in rules:
+        field = rule['field']
+        if field not in rules_by_field:
+            rules_by_field[field] = []
+        rules_by_field[field].append(rule)
+    
+    return jsonify({
+        'total_rules': len(rules),
+        'rules': rules,
+        'rules_by_field': rules_by_field
+    })
+
+# ============================================================================
+# NEW ENDPOINT: Get statistics by form
+# ============================================================================
+
+@app.route('/api/stats/by-form')
+@login_required
+def stats_by_form():
+    """Get error statistics grouped by form"""
+    conn = sqlite3.connect('validation_results.db')
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT 
+            form_name,
+            COUNT(*) as error_count,
+            SUM(CASE WHEN severity = 'Critical' THEN 1 ELSE 0 END) as critical_count,
+            SUM(CASE WHEN severity = 'Warning' THEN 1 ELSE 0 END) as warning_count,
+            SUM(CASE WHEN severity = 'Info' THEN 1 ELSE 0 END) as info_count
+        FROM validation_errors
+        WHERE status = 'Active'
+        GROUP BY form_name
+        ORDER BY error_count DESC
+    ''')
+    
+    rows = cursor.fetchall()
+    conn.close()
+    
+    stats = []
+    for row in rows:
+        stats.append({
+            'form_name': row[0] or 'Unknown',
+            'error_count': row[1],
+            'critical': row[2],
+            'warning': row[3],
+            'info': row[4]
+        })
+    
+    return jsonify(stats)
 
 @app.route('/resolve/<int:error_id>', methods=['POST'])
 @login_required
@@ -214,8 +623,8 @@ def add_test_data():
             'entered_by': 'Maria Lopez',
             'device_info': {'device': 'Scanner #3', 'location': 'Warehouse B'},
             'severity': 'Critical',
-            'status': 'Pending',
-            'timestamp': '2026-02-25 09:12'
+            'status': 'Active',
+            'timestamp': (datetime.now() - timedelta(minutes=30)).isoformat()
         },
         {
             'record_id': 'RC-002',
@@ -226,8 +635,8 @@ def add_test_data():
             'entered_by': 'James Carter',
             'device_info': {'device': 'Terminal #7', 'location': 'Floor 2'},
             'severity': 'Critical',
-            'status': 'Corrected',
-            'timestamp': '2026-02-25 09:08'
+            'status': 'Active',
+            'timestamp': (datetime.now() - timedelta(minutes=25)).isoformat()
         },
         {
             'record_id': 'RC-003',
@@ -238,44 +647,8 @@ def add_test_data():
             'entered_by': 'Aisha Patel',
             'device_info': {'device': 'Mobile App', 'location': 'iOS'},
             'severity': 'Warning',
-            'status': 'Pending',
-            'timestamp': '2026-02-25 08:55'
-        },
-        {
-            'record_id': 'RC-004',
-            'field_name': 'Expiry Date',
-            'error_value': '30/02/2026',
-            'error_message': 'Invalid date — February has no 30th',
-            'suggested_correction': '28/02/2026',
-            'entered_by': 'Tom Nguyen',
-            'device_info': {'device': 'Scanner #1', 'location': 'Warehouse A'},
-            'severity': 'Critical',
-            'status': 'Pending',
-            'timestamp': '2026-02-25 08:42'
-        },
-        {
-            'record_id': 'RC-005',
-            'field_name': 'Supplier Name',
-            'error_value': 'Acmee Corp',
-            'error_message': 'Possible typo in supplier name',
-            'suggested_correction': 'Acme Corp',
-            'entered_by': 'Sara Kim',
-            'device_info': {'device': 'Desktop', 'location': 'Office'},
-            'severity': 'Info',
-            'status': 'Corrected',
-            'timestamp': '2026-02-25 08:30'
-        },
-        {
-            'record_id': 'RC-006',
-            'field_name': 'Unit Price',
-            'error_value': '-5.00',
-            'error_message': 'Negative unit price detected',
-            'suggested_correction': '5.00',
-            'entered_by': 'James Carter',
-            'device_info': {'device': 'Terminal #2', 'location': 'Floor 1'},
-            'severity': 'Critical',
-            'status': 'Dismissed',
-            'timestamp': '2026-02-25 08:15'
+            'status': 'Active',
+            'timestamp': (datetime.now() - timedelta(minutes=20)).isoformat()
         }
     ]
     
@@ -283,6 +656,62 @@ def add_test_data():
         db.log_error(error)
     
     flash('Sample data loaded successfully', 'success')
+    return redirect(url_for('dashboard_with_project', project=session.get('current_project', 'ibd')))
+
+@app.route('/test-mock')
+@login_required
+def test_mock():
+    """Test with mock data from validation_engine"""
+    # Test with REC-002 which has multiple errors
+    errors = validator.validate_record('REC-002')
+    
+    # Log to database
+    for error in errors:
+        db.log_error(error)
+    
+    flash(f'Test data validated. Found {len(errors)} errors.', 'success')
+    return redirect(url_for('dashboard_with_project', project=session.get('current_project', 'ibd')))
+
+@app.route('/test-champs')
+@login_required
+def test_champs():
+    """Test with CHAMPS-specific mock data"""
+    # Create a mock record with CHAMPS fields
+    mock_record = {
+        'record_id': 'CHAMPS-001',
+        'champs_id_ps': '12345678',  # Only 8 digits - should trigger Rule 1
+        'versionofdataspecification': '2.0.0',  # Wrong version - Rule 2
+        'alt_mom_id_reg': 'A' * 60,  # Too long - Rule 3
+        'phone_primary': '555-123-4567',  # Has dashes - Rules 4 & 5
+        'address_primary': '',  # Empty - Rule 6 (Critical)
+        'catchment_idreg': '5',  # Invalid - Rule 7
+        'date_dob_mom': '2026-01-01',  # Future date - Rule 64
+        'vocation': 'INVALID',  # Invalid - Rule 69
+    }
+    
+    # Store original method
+    original_fetch = validator.fetch_record
+    
+    # Override
+    def mock_fetch(rid):
+        if rid == 'CHAMPS-001':
+            return mock_record
+        return original_fetch(rid)
+    
+    validator.fetch_record = mock_fetch
+    
+    # Validate
+    errors = validator.validate_record('CHAMPS-001')
+    
+    # Restore
+    validator.fetch_record = original_fetch
+    
+    # Log errors
+    for error in errors:
+        error['device_info'] = {'device': 'CHAMPS Test', 'user': session.get('name', 'Unknown')}
+        db.log_error(error)
+    
+    flash(f'CHAMPS test complete. Found {len(errors)} errors.', 'success')
     return redirect(url_for('dashboard_with_project', project=session.get('current_project', 'ibd')))
 
 @app.route('/profile')
@@ -293,7 +722,8 @@ def profile():
                          user=session.get('name'),
                          username=session.get('user'),
                          role=session.get('role'),
-                         login_time=session.get('login_time'))
+                         login_time=session.get('login_time'),
+                         current_project=session.get('current_project', 'ibd'))
 
 # ============= USER MANAGEMENT ROUTES =============
 
@@ -302,7 +732,7 @@ def profile():
 def manage_users():
     """Admin-only user management"""
     users = db.get_all_users()
-    return render_template('users.html', users=users)
+    return render_template('users.html', users=users, current_project=session.get('current_project', 'ibd'))
 
 @app.route('/add-user', methods=['POST'])
 @admin_required
@@ -422,20 +852,6 @@ def test_validation(record_id):
         'errors': errors
     })
 
-@app.route('/test-mock')
-@login_required
-def test_mock():
-    """Test with mock data"""
-    # Test with REC-002 which has multiple errors
-    errors = validator.validate_record('REC-002')
-    
-    # Log to database
-    for error in errors:
-        db.log_error(error)
-    
-    flash('Test data validated and logged', 'success')
-    return redirect(url_for('dashboard_with_project', project=session.get('current_project', 'ibd')))
-
 @app.route('/clear-all', methods=['POST'])
 @admin_required
 def clear_all_errors():
@@ -445,5 +861,87 @@ def clear_all_errors():
     flash(f'{count} errors cleared successfully', 'success')
     return redirect(url_for('dashboard_with_project', project=session.get('current_project', 'ibd')))
 
+@app.route('/bulk-resolve', methods=['POST'])
+@admin_required
+def bulk_resolve():
+    """Resolve multiple errors at once"""
+    error_ids = request.form.getlist('error_ids')
+    notes = request.form.get('notes', 'Bulk resolve')
+    
+    if not error_ids:
+        flash('No errors selected', 'warning')
+        return redirect(url_for('dashboard_with_project', project=session.get('current_project', 'ibd')))
+    
+    count = 0
+    for error_id in error_ids:
+        try:
+            error_id = int(error_id)
+            if db.resolve_error(error_id, f"{notes} [Bulk by: {session.get('name')}]"):
+                count += 1
+        except:
+            pass
+    
+    flash(f'{count} errors resolved successfully', 'success')
+    return redirect(url_for('dashboard_with_project', project=session.get('current_project', 'ibd')))
+
+#@app.errorhandler(404)
+#def page_not_found(e):
+#    """Handle 404 errors"""
+#    return render_template('404.html'), 404
+
+@app.errorhandler(500)
+def internal_server_error(e):
+    """Handle 500 errors"""
+    return render_template('500.html'), 500
+
 if __name__ == '__main__':
+    # Ensure database is initialized
+    try:
+        # Initialize validation_results.db if needed
+        conn = sqlite3.connect('validation_results.db')
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS validation_errors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                error_id TEXT,
+                record_id TEXT,
+                field_name TEXT,
+                error_value TEXT,
+                error_message TEXT,
+                suggested_correction TEXT,
+                entered_by TEXT,
+                device_info TEXT,
+                severity TEXT,
+                status TEXT DEFAULT 'Active',
+                timestamp TEXT,
+                form_name TEXT,
+                next_form TEXT,
+                resolved_notes TEXT,
+                resolved_at TEXT,
+                resolved_by TEXT
+            )
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS validation_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                error_id INTEGER,
+                action TEXT,
+                action_by TEXT,
+                action_notes TEXT,
+                action_time TEXT,
+                FOREIGN KEY (error_id) REFERENCES validation_errors (id)
+            )
+        ''')
+        conn.commit()
+        conn.close()
+        print("✅ Database initialized successfully")
+    except Exception as e:
+        print(f"⚠️ Database initialization warning: {e}")
+    
+    print("=" * 50)
+    print("🚀 REDCap Validation System")
+    print(f"🔗 Dashboard URL: http://127.0.0.1:5000")
+    print(f"🔗 Validation API: http://127.0.0.1:5000/api/validate-on-submit")
+    print("=" * 50)
+    
     app.run(debug=True, port=5000)

@@ -387,11 +387,23 @@
     </style>
 </head>
 <body>
+    <!-- Header -->
+        <div class="header">
+            <div class="header-left">
+                <a href="/dashboard-with-project?project={{ current_project }}" class="back-link">
+                    <i class="fas fa-arrow-left"></i> Back to Dashboard
+                </a>
+                <h1>Manage Users</h1>
+            </div>
+            <button class="add-btn" onclick="openAddModal()">
+                <i class="fas fa-plus"></i> Add New User
+            </button>
+        </div>
     <div class="container">
         <!-- Header -->
         <div class="header">
             <div class="header-left">
-                <a href="{{ url_for('dashboard') }}" class="back-link">
+                <a href="{{ url_for('dashboard_redirect') }}" class="back-link">
                     <i class="fas fa-arrow-left"></i> Back to Dashboard
                 </a>
                 <h1>Manage Users</h1>
